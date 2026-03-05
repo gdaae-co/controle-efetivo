@@ -273,23 +273,23 @@
         };
 
         const calcularEstatisticas = (militarFiltro = '') => {
-          const stats = {};
+          const status = {};
           const listaMilitares = militarFiltro ? militares.filter(m => m.nome === militarFiltro) : militares;
-          listaMilitares.forEach(m => stats[m.nome] = { presente: 0, falta: 0, atrasado: 0, total: 0 });
+          listaMilitares.forEach(m => status[m.nome] = { presente: 0, falta: 0, atrasado: 0, total: 0 });
 
           Object.keys(chamadas).forEach(date => {
             if (date.startsWith(selectedMonth)) {
               Object.keys(chamadas[date]).forEach(militar => {
-                if (stats[militar]) {
+                if (status[militar]) {
                   const { status } = chamadas[date][militar];
-                  stats[militar].total++;
-                  if (status === 'PRESENTE' || status === 'ATRASADO') stats[militar].presente++;
-                  if (status === 'FALTA') stats[militar].falta++;
+                  status[militar].total++;
+                  if (status === 'PRESENTE' || status === 'ATRASADO') status[militar].presente++;
+                  if (status === 'FALTA') status[militar].falta++;
                 }
               });
             }
           });
-          return stats;
+          return status;
         };
 
         const exportarParaExcel = async () => {
@@ -495,7 +495,7 @@
                     activeTab === 'estatisticas' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700'
                   }`}
                 >
-                  📊 Stats
+                  📊 status
                 </button>
                 <button
                   onClick={() => setActiveTab('militares')}
@@ -690,14 +690,14 @@
                         </thead>
                         <tbody>
                           {(selectedMilitar ? militares.filter(m => m.nome === selectedMilitar) : militares).map((m) => {
-                            const stats = estatisticas[m.nome];
-                            const taxa = stats.total > 0 ? ((stats.presente / stats.total) * 100).toFixed(0) : 0;
+                            const status = estatisticas[m.nome];
+                            const taxa = status.total > 0 ? ((status.presente / status.total) * 100).toFixed(0) : 0;
                             return (
                               <tr key={m.id} className="border-b">
                                 <td className="px-2 py-1 text-xs">{m.nome.slice(0, 12)}</td>
-                                <td className="px-2 py-1 text-center">{stats.total}</td>
-                                <td className="px-2 py-1 text-center text-green-700">{stats.presente}</td>
-                                <td className="px-2 py-1 text-center text-red-700">{stats.falta}</td>
+                                <td className="px-2 py-1 text-center">{status.total}</td>
+                                <td className="px-2 py-1 text-center text-green-700">{status.presente}</td>
+                                <td className="px-2 py-1 text-center text-red-700">{status.falta}</td>
                                 <td className="px-2 py-1 text-center font-bold">{taxa}%</td>
                               </tr>
                             );
@@ -1004,3 +1004,4 @@
     </script>
 </body>
 </html>
+
