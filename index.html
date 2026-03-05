@@ -1,0 +1,1035 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Controle Efetivo">
+    <meta name="theme-color" content="#0f172a">
+    <title>Controle de Efetivo - 1º GDAAE</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-firestore-compat.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif; background: #f1f5f9; }
+        input, select, textarea, button { font-size: 16px !important; }
+        
+        .custom-scrollbar::-webkit-scrollbar { width: 6px; }
+        .custom-scrollbar::-webkit-scrollbar-track { background: #f1f5f9; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 10px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+        
+        /* ANIMAÇÕES DO LOGIN (CENTRO DE COMANDO) */
+        .scanner-line {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 2px;
+            background: linear-gradient(to right, transparent, rgba(56, 189, 248, 0.9), transparent);
+            box-shadow: 0 0 20px rgba(56, 189, 248, 0.8);
+            animation: scan 6s linear infinite;
+            z-index: 15;
+        }
+        @keyframes scan {
+            0% { top: -10%; opacity: 0; }
+            10% { opacity: 1; }
+            90% { opacity: 1; }
+            100% { top: 110%; opacity: 0; }
+        }
+        
+        .login-title-shadow {
+            text-shadow: 0 8px 25px rgba(0,0,0,0.8), 0 0 30px rgba(56, 189, 248, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script>
+      const firebaseConfig = {
+        apiKey: "AIzaSyAicrUUVodI5hXjvlKsObpsu4COsj4zKzM",
+        authDomain: "controle-efetivo-gdaae.firebaseapp.com",
+        projectId: "controle-efetivo-gdaae",
+        storageBucket: "controle-efetivo-gdaae.firebasestorage.app",
+        messagingSenderId: "429973959348",
+        appId: "1:429973959348:web:9ab69b7cb1efe242ab5de1"
+      };
+      firebase.initializeApp(firebaseConfig);
+      const db = firebase.firestore();
+      const auth = firebase.auth();
+    </script>
+
+    <script type="text/babel">
+      const { useState, useEffect } = React;
+      const ADMIN_EMAIL = "matheusgarcia9607@gmail.com";
+
+      function EfetivoApp() {
+        const [user, setUser] = useState(null);
+        const [userData, setUserData] = useState(null);
+        const [email, setEmail] = useState('');
+        const [password, setPassword] = useState('');
+        const [error, setError] = useState('');
+        const [militares, setMilitares] = useState([]);
+        const [chamadas, setChamadas] = useState({});
+        const [activeTab, setActiveTab] = useState('chamada');
+        const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
+        const [selectedMonth, setSelectedMonth] = useState(new Date().toISOString().slice(0, 7));
+        const [selectedMilitar, setSelectedMilitar] = useState('');
+        const [fotoApp, setFotoApp] = useState(() => localStorage.getItem('fotoApp') || '');
+        const [novoMilitar, setNovoMilitar] = useState({ nome: '', post: 'S1', secao: '' });
+        const [militarEmEdicao, setMilitarEmEdicao] = useState(null);
+        
+        // Filtros e Paginação
+        const [busca, setBusca] = useState('');
+        const [filtroPosto, setFiltroPosto] = useState('');
+        const [filtroSecao, setFiltroSecao] = useState('');
+        const [paginaAtual, setPaginaAtual] = useState(1);
+        const itensPorPagina = 15;
+
+        // Dashboard (Estatísticas)
+        const [statsTipo, setStatsTipo] = useState('diario');
+        const [statsData, setStatsData] = useState(new Date().toISOString().split('T')[0]);
+        const [statsMes, setStatsMes] = useState(new Date().toISOString().slice(0, 7));
+        const [statsSecao, setStatsSecao] = useState('');
+
+        // Usuários
+        const [usersList, setUsersList] = useState([]);
+        const [newUserEmail, setNewUserEmail] = useState('');
+        const [newUserPassword, setNewUserPassword] = useState('');
+        const [newUserNomeGuerra, setNewUserNomeGuerra] = useState('');
+        const [newUserRole, setNewUserRole] = useState('user');
+        const [editUserId, setEditUserId] = useState(null);
+        const [editNomeGuerra, setEditNomeGuerra] = useState('');
+        const [editUserRole, setEditUserRole] = useState('user');
+        
+        // Drag and Drop
+        const [draggedId, setDraggedId] = useState(null);
+        const [dragOverId, setDragOverId] = useState(null);
+
+        const secoes = [
+          'CMD', 'ASSESO', 'SOP', 'SSEÇDOUT', 'SSEÇADEOP', 'SSEÇCIAOP',
+          'SSEÇPIAOP', 'SSEÇGMASOP', 'SAAD', 'SSEÇGEP', 'SSEÇGDOC',
+          'SSEÇGIP', 'SSEÇLOGOP', 'BATERIA'
+        ];
+
+        const postos = ['Cel', 'TC', 'MJ', 'CP', '1T', '2T', 'ASP', 'SO', '1S', '2S', '3S', 'CB', 'S1', 'S2'];
+
+        // Login Listener
+        useEffect(() => {
+          const unsubscribe = auth.onAuthStateChanged(async (u) => {
+            setUser(u);
+            if (u) {
+              const userDoc = await db.collection("usuarios").doc(u.uid).get();
+              if (userDoc.exists) {
+                setUserData(userDoc.data());
+              } else {
+                const defaultRole = (u.email === ADMIN_EMAIL) ? "admin" : "user";
+                await db.collection("usuarios").doc(u.uid).set({
+                  email: u.email,
+                  nomeGuerra: u.email.split('@')[0].toUpperCase(),
+                  role: defaultRole,
+                  createdAt: new Date().toISOString()
+                });
+                setUserData({ role: defaultRole, nomeGuerra: u.email.split('@')[0].toUpperCase() });
+              }
+            } else {
+              setUserData(null);
+            }
+          });
+          return unsubscribe;
+        }, []);
+
+        // Carrega militares e chamadas
+        useEffect(() => {
+          db.collection("dados").doc("militares").get().then(doc => {
+              if (doc.exists) { setMilitares(doc.data().lista || []); }
+            });
+        }, []);
+
+        useEffect(() => {
+          if (!user || userData?.role !== "admin" || militares.length === 0) return;
+          db.collection("dados").doc("militares").set({ lista: militares });
+        }, [militares, userData]);
+
+        useEffect(() => {
+          if (!user) return;
+          db.collection("usuarios").doc(user.uid).collection("dados").doc("chamadas").get().then(doc => {
+              if (doc.exists) setChamadas(doc.data() || {});
+            });
+        }, [user]);
+
+        const getExpediente = (dateStr) => {
+          const date = new Date(dateStr + 'T00:00:00');
+          return date.getDay() === 5 ? { inicio: '08:00', fim: '12:00' } : { inicio: '09:00', fim: '17:00' };
+        };
+
+        const getChamadaDodia = (date) => {
+          if (!chamadas[date]) {
+            const inicial = {};
+            militares.forEach(m => { inicial[m.nome] = { status: 'PRESENTE', horario: '', observacao: '' }; });
+            setChamadas(prev => ({ ...prev, [date]: inicial }));
+            if (user) db.collection("usuarios").doc(user.uid).collection("dados").doc("chamadas").set({ ...chamadas, [date]: inicial }, { merge: true });
+            return inicial;
+          }
+          return chamadas[date];
+        };
+
+        const salvarChamada = (date, militar, status, horario = '', observacao = '') => {
+          const novaChamada = { ...chamadas };
+          if (!novaChamada[date]) novaChamada[date] = {};
+          novaChamada[date][militar] = { status, horario, observacao };
+          setChamadas(novaChamada);
+          if (user) db.collection("usuarios").doc(user.uid).collection("dados").doc("chamadas").set(novaChamada, { merge: true });
+        };
+
+        const adicionarMilitar = () => {
+          if (!novoMilitar.nome.trim()) return alert('Digite o nome!');
+          const novoId = Math.max(...militares.map(m => m.id || 0), 0) + 1;
+          const militar = { id: novoId, nome: novoMilitar.nome.toUpperCase(), post: novoMilitar.post, secao: novoMilitar.secao };
+          setMilitares([...militares, militar]);
+          setNovoMilitar({ nome: '', post: 'S1', secao: '' });
+          alert('Militar adicionado!');
+        };
+
+        const editarMilitar = (id) => setMilitarEmEdicao(militares.find(m => m.id === id));
+
+        const salvarEdicao = () => {
+          if (!militarEmEdicao.nome.trim()) return alert('Digite o nome!');
+          setMilitares(militares.map(m => m.id === militarEmEdicao.id ? { ...m, nome: militarEmEdicao.nome.toUpperCase(), post: militarEmEdicao.post, secao: militarEmEdicao.secao } : m));
+          setMilitarEmEdicao(null);
+          alert('Militar atualizado!');
+        };
+
+        const deletarMilitar = (id) => { if (window.confirm('Deletar este militar?')) setMilitares(militares.filter(m => m.id !== id)); };
+
+        const handleFotoUpload = (e) => {
+          const file = e.target.files[0];
+          if (file) {
+            const reader = new FileReader();
+            reader.onload = (event) => { setFotoApp(event.target.result); localStorage.setItem('fotoApp', event.target.result); };
+            reader.readAsDataURL(file);
+          }
+        };
+
+        const removerFoto = () => { setFotoApp(''); localStorage.removeItem('fotoApp'); };
+
+        const getEstatisticas = () => {
+          let totais = {};
+          let totalGeral = 0;
+          let diasContados = 0;
+          const militaresStats = statsSecao ? militares.filter(m => m.secao === statsSecao) : militares;
+
+          if (militaresStats.length === 0) return { sortedStats: [], totalGeral: 0, diasContados: 0 };
+
+          if (statsTipo === 'diario') {
+            const chamadaDiaStats = chamadas[statsData] || {};
+            militaresStats.forEach(m => {
+              const st = chamadaDiaStats[m.nome]?.status || 'PRESENTE';
+              totais[st] = (totais[st] || 0) + 1;
+              totalGeral++;
+            });
+            diasContados = 1;
+          } else {
+            const diasNoMes = Object.keys(chamadas).filter(d => d.startsWith(statsMes));
+            diasContados = diasNoMes.length;
+            diasNoMes.forEach(dia => {
+              militaresStats.forEach(m => {
+                const st = chamadas[dia][m.nome]?.status || 'PRESENTE';
+                totais[st] = (totais[st] || 0) + 1;
+                totalGeral++;
+              });
+            });
+          }
+
+          const sortedStats = Object.keys(totais).map(k => ({ status: k, count: totais[k] })).sort((a,b) => b.count - a.count);
+          return { sortedStats, totalGeral, diasContados };
+        };
+
+        const exportarParaPDF = () => {
+          const dataReferencia = new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR');
+          const meio = Math.ceil(militaresFiltrados.length / 2);
+          const coluna1 = militaresFiltrados.slice(0, meio);
+          const coluna2 = militaresFiltrados.slice(meio);
+
+          const renderTabela = (lista, offsetIndex) => {
+            let html = `<table class="tabela-print"><thead><tr><th class="col-num">#</th><th class="col-nome">Militar</th><th class="col-posto">Posto/Sec</th><th class="col-status">Status</th><th class="col-obs">Observação</th></tr></thead><tbody>`;
+            lista.forEach((militar, index) => {
+              const chamadaDados = chamadas[selectedDate]?.[militar.nome] || { status: 'PRESENTE', horario: '', observacao: '' };
+              let corStatus = chamadaDados.status === 'PRESENTE' ? 'status-verde' : chamadaDados.status === 'FALTA' ? 'status-vermelho' : chamadaDados.status === 'ATRASADO' ? 'status-amarelo' : '';
+              html += `<tr><td class="col-num">${offsetIndex + index + 1}</td><td class="col-nome">${militar.nome}</td><td class="col-posto">${militar.post} ${militar.secao ? `(${militar.secao})` : ''}</td><td class="col-status ${corStatus}">${chamadaDados.status} ${chamadaDados.horario ? `<span style="font-size:8px;color:#64748b;">${chamadaDados.horario}</span>` : ''}</td><td class="col-obs">${chamadaDados.observacao || '-'}</td></tr>`;
+            });
+            return html + `</tbody></table>`;
+          };
+
+          let htmlContent = `
+            <!DOCTYPE html><html><head><meta charset="UTF-8"><title>Relatório - ${dataReferencia}</title>
+              <style>
+                body { font-family: 'Helvetica', 'Arial', sans-serif; color: #1f2937; margin: 0; padding: 10px 20px; box-sizing: border-box; }
+                .header { text-align: center; border-bottom: 2px solid #1f2937; padding-bottom: 5px; margin-bottom: 10px; position: relative; min-height: 55px; }
+                .header img { max-height: 50px; max-width: 80px; object-fit: contain; position: absolute; left: 0; top: 0; }
+                h1 { font-size: 18px; margin: 0 0 2px 0; text-transform: uppercase; letter-spacing: 1px; }
+                p { margin: 1px 0; font-size: 11px; color: #4b5563; }
+                .tabelas-wrapper { display: flex; gap: 15px; align-items: flex-start; }
+                .tabela-print { width: 100%; border-collapse: collapse; font-size: 9px; }
+                th { background-color: #f1f5f9; color: #0f172a; padding: 4px; text-align: left; border: 1px solid #94a3b8; font-weight: bold; text-transform: uppercase; font-size: 8px; }
+                td { padding: 3px 4px; border: 1px solid #cbd5e1; vertical-align: middle; }
+                .col-num { width: 3%; text-align: center; color: #64748b; } .col-nome { width: 32%; font-weight: bold; }
+                .col-posto { width: 15%; font-size: 8px; } .col-status { width: 20%; font-size: 8px; } .col-obs { width: 30%; font-size: 8px; }
+                .status-verde { color: #16a34a; font-weight: bold; } .status-vermelho { color: #dc2626; font-weight: bold; } .status-amarelo { color: #d97706; font-weight: bold; }
+                .assinatura-container { display: flex; justify-content: flex-end; margin-top: 15px; page-break-inside: avoid; }
+                .assinatura { text-align: center; width: 250px; font-size: 11px; } .linha-assinatura { border-top: 1px solid #0f172a; margin-bottom: 3px; }
+                @media print { @page { size: A4 landscape; margin: 5mm; } body { padding: 0; -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+              </style></head>
+            <body>
+              <div class="header">${fotoApp ? `<img src="${fotoApp}" alt="Logo">` : ''}<h1>1º GDAAE - Relatório de Efetivo</h1><p><strong>Data de Referência:</strong> ${dataReferencia}</p><p><strong>Gerado por:</strong> ${userData?.nomeGuerra || user?.email} em ${new Date().toLocaleString('pt-BR')}</p></div>
+              <div class="tabelas-wrapper">${renderTabela(coluna1, 0)}${coluna2.length > 0 ? renderTabela(coluna2, meio) : ''}</div>
+              <div class="assinatura-container"><div class="assinatura"><div class="linha-assinatura"></div><p><strong>CHEFE DA SUBSEÇÃO DE GESTÃO DE PESSOAL</strong></p></div></div>
+              <script>window.onload=function(){window.print();setTimeout(function(){window.close();},500);}<\/script>
+            </body></html>`;
+
+          const printWindow = window.open('', '_blank');
+          printWindow.document.write(htmlContent);
+          printWindow.document.close();
+        };
+
+        // Gerenciar usuários
+        useEffect(() => {
+          if (userData?.role !== "admin") return;
+          db.collection("usuarios").get().then(snapshot => {
+            const list = [];
+            snapshot.forEach(doc => list.push({ id: doc.id, ...doc.data() }));
+            setUsersList(list);
+          });
+        }, [userData]);
+
+        const criarUsuario = async () => {
+          if (!newUserEmail || !newUserPassword || !newUserNomeGuerra.trim()) return alert('Preencha email, senha e Nome de Guerra!');
+          try {
+            const cred = await auth.createUserWithEmailAndPassword(newUserEmail, newUserPassword);
+            await db.collection("usuarios").doc(cred.user.uid).set({ email: newUserEmail, nomeGuerra: newUserNomeGuerra.trim().toUpperCase(), role: newUserRole, createdAt: new Date().toISOString() });
+            alert('Usuário criado com sucesso!');
+            setNewUserEmail(''); setNewUserPassword(''); setNewUserNomeGuerra('');
+          } catch (err) { alert('Erro ao criar: ' + err.message); }
+        };
+
+        const editarUsuario = async () => {
+          if (!editNomeGuerra.trim()) return alert('Digite o novo Nome de Guerra!');
+          try {
+            await db.collection("usuarios").doc(editUserId).update({ nomeGuerra: editNomeGuerra.trim().toUpperCase(), role: editUserRole });
+            alert('Usuário atualizado!');
+            setUsersList(usersList.map(u => u.id === editUserId ? { ...u, nomeGuerra: editNomeGuerra.trim().toUpperCase(), role: editUserRole } : u));
+            setEditUserId(null); setEditNomeGuerra(''); setEditUserRole('user');
+          } catch (err) { alert('Erro: ' + err.message); }
+        };
+
+        const deletarUsuario = async (id, nomeUsuario) => {
+          if (user.uid === id) return alert('Você não pode excluir o seu próprio usuário logado!');
+          if (window.confirm(`Excluir permanentemente o acesso de ${nomeUsuario}?`)) {
+            try {
+              await db.collection("usuarios").doc(id).delete();
+              setUsersList(usersList.filter(u => u.id !== id));
+              alert('Usuário excluído!');
+            } catch (err) { alert('Erro: ' + err.message); }
+          }
+        };
+
+        const militaresFiltrados = militares.filter(m => {
+          const matchBusca = m.nome.toLowerCase().includes(busca.toLowerCase()) || m.post.toLowerCase().includes(busca.toLowerCase()) || (m.secao || '').toLowerCase().includes(busca.toLowerCase());
+          const matchPosto = filtroPosto === '' || m.post === filtroPosto;
+          const matchSecao = filtroSecao === '' || m.secao === filtroSecao;
+          return matchBusca && matchPosto && matchSecao;
+        });
+
+        const totalPaginas = Math.ceil(militaresFiltrados.length / itensPorPagina);
+        const militaresPaginados = militaresFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
+
+        const handleBusca = (v) => { setBusca(v); setPaginaAtual(1); };
+        const handleFiltroPosto = (v) => { setFiltroPosto(v); setPaginaAtual(1); };
+        const handleFiltroSecao = (v) => { setFiltroSecao(v); setPaginaAtual(1); };
+
+        // ==========================================
+        // TELA DE LOGIN VIP (CENTRO DE COMANDO MAIS CLARO)
+        // ==========================================
+        if (!user) {
+          return (
+            <div className="min-h-screen flex bg-slate-900 font-sans">
+              
+              {/* Lado Esquerdo - Fundo Tecnológico C2 (Agora mais claro!) */}
+              <div 
+                className="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center bg-blue-900"
+                style={{
+                  /* Reduzi a opacidade do filtro azul escuro para deixar a imagem de fundo brilhar e ficar bem mais clara */
+                  backgroundImage: `linear-gradient(rgba(30, 58, 138, 0.2), rgba(15, 23, 42, 0.6)), url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop')`,
+                  backgroundSize: 'cover',
+                  backgroundPosition: 'center',
+                  backgroundRepeat: 'no-repeat'
+                }}
+              >
+                {/* Linha de Scanner que fica passando de cima para baixo */}
+                <div className="scanner-line"></div>
+
+                {/* Texto sobreposto */}
+                <div className="relative z-20 text-center px-12">
+                  <h2 className="text-6xl xl:text-7xl font-black mb-4 tracking-tight text-white login-title-shadow">
+                    1º GDAAE
+                  </h2>
+                  <p className="text-xl xl:text-2xl font-bold text-white uppercase tracking-widest drop-shadow-lg">
+                    Grupo de Defesa Antiaérea
+                  </p>
+                  <div className="mt-12 inline-block p-5 backdrop-blur-md bg-slate-900/40 rounded-2xl border border-white/30 shadow-2xl">
+                    <p className="text-sm font-black tracking-widest uppercase text-blue-300">Sistema Integrado de Efetivo</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Lado Direito - Formulário */}
+              <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-slate-50 relative shadow-[-10px_0_30px_rgba(0,0,0,0.3)] z-30">
+                <div className="max-w-md w-full space-y-8 relative z-10">
+                  
+                  {/* Cabeçalho do Form */}
+                  <div className="text-center">
+                    {fotoApp ? (
+                      <img src={fotoApp} alt="Logo GDAAE" className="mx-auto h-28 w-28 object-contain rounded-2xl shadow-lg border-4 border-white bg-white" />
+                    ) : (
+                      <div className="mx-auto h-24 w-24 bg-indigo-600 rounded-2xl shadow-lg flex items-center justify-center border-4 border-white">
+                        <span className="text-4xl text-white">🛡️</span>
+                      </div>
+                    )}
+                    <h2 className="mt-8 text-3xl font-extrabold text-slate-900 tracking-tight">
+                      Acesso Restrito
+                    </h2>
+                    <p className="mt-2 text-sm text-slate-500 font-semibold uppercase tracking-wide">
+                      Insira suas credenciais para gerenciar o efetivo
+                    </p>
+                  </div>
+
+                  {/* Caixa do Formulário */}
+                  <div className="mt-8 bg-white py-8 px-6 shadow-2xl rounded-3xl border border-slate-100 sm:px-10">
+                    
+                    {error && (
+                      <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
+                        <div className="flex items-center">
+                          <div className="flex-shrink-0 text-xl mr-3">❌</div>
+                          <div><p className="text-sm text-red-800 font-bold">Credenciais inválidas ou usuário não encontrado.</p></div>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Email Operacional</label>
+                        <input
+                          type="email"
+                          value={email}
+                          onChange={e => setEmail(e.target.value)}
+                          className="appearance-none block w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl shadow-sm placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-indigo-500 transition-colors font-medium text-slate-800 bg-slate-50 focus:bg-white"
+                          placeholder="usuario@fab.mil.br"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Senha Pessoal</label>
+                        <input
+                          type="password"
+                          value={password}
+                          onChange={e => setPassword(e.target.value)}
+                          className="appearance-none block w-full px-4 py-3.5 border-2 border-slate-200 rounded-xl shadow-sm placeholder-slate-400 focus:outline-none focus:ring-0 focus:border-indigo-500 transition-colors font-medium text-slate-800 bg-slate-50 focus:bg-white"
+                          placeholder="••••••••"
+                        />
+                      </div>
+
+                      <div className="pt-2">
+                        <button
+                          onClick={() => auth.signInWithEmailAndPassword(email, password).catch(err => setError(err.message))}
+                          className="w-full flex justify-center py-3.5 px-4 border border-transparent rounded-xl shadow-lg shadow-indigo-200 text-sm font-extrabold text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 transition-all transform active:scale-[0.98]"
+                        >
+                          AUTENTICAR SISTEMA
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 text-center border-t border-slate-100 pt-6">
+                      <p className="text-xs text-slate-400 font-semibold leading-relaxed">
+                        Acesso exclusivo para pessoal autorizado. <br/> Contate a Seção de TI em caso de problemas técnicos.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+                
+                <div className="absolute bottom-6 text-center w-full px-6 flex justify-center items-center gap-2">
+                   <p className="text-xs font-bold text-slate-400">Desenvolvido por 3S SGS OSCAR • v3.0</p>
+                </div>
+              </div>
+            </div>
+          );
+        }
+
+        const isAdmin = userData?.role === "admin";
+        const chamadaDia = getChamadaDodia(selectedDate);
+        const expediente = getExpediente(selectedDate);
+        const dayName = new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR', { weekday: 'long' });
+
+        return (
+          <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-20 relative">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white sticky top-0 z-40 shadow-lg">
+              <div className="px-4 py-4 sm:py-6">
+                <div className="flex items-center gap-3 flex-wrap">
+                  {fotoApp && (
+                    <div className="w-12 h-12 bg-white rounded-lg overflow-hidden shadow-md flex-shrink-0 border-2 border-slate-700">
+                      <img src={fotoApp} alt="Logo" className="w-full h-full object-cover" />
+                    </div>
+                  )}
+                  <div className="flex-1">
+                    <h1 className="text-xl sm:text-2xl font-bold">Controle de Efetivo</h1>
+                    <p className="text-xs sm:text-sm text-slate-300">1º GDAAE</p>
+                  </div>
+                  <div className="text-right text-xs text-slate-300">
+                    <p className="font-bold text-white text-base">{militares.length}</p>
+                    <p>Militares Totais</p>
+                  </div>
+                </div>
+                <div className="mt-3 flex justify-between items-center bg-slate-800/50 p-2 rounded-lg">
+                  <p className="text-xs sm:text-sm text-slate-300 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></span>
+                    Logado: <strong className="text-white">{userData?.nomeGuerra || user.email.split('@')[0].toUpperCase()}</strong> 
+                    <span className={`ml-1 px-2 py-0.5 rounded text-[10px] text-white font-bold uppercase ${userData?.role === 'admin' ? 'bg-indigo-600' : 'bg-slate-600'}`}>{userData?.role || 'carregando'}</span>
+                  </p>
+                  <button onClick={() => auth.signOut()} className="bg-red-500 hover:bg-red-600 text-white px-4 py-1.5 rounded-md text-xs font-bold transition-colors shadow-sm">
+                    Sair
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Tabs */}
+            <div className="px-2 sm:px-4 mt-4">
+              <div className="flex gap-1 bg-white rounded-lg shadow-md p-2 border-b-4 border-slate-900 overflow-x-auto">
+                <button onClick={() => setActiveTab('chamada')} className={`px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap transition-all ${activeTab === 'chamada' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>📋 Chamada</button>
+                <button onClick={() => setActiveTab('estatisticas')} className={`px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap transition-all ${activeTab === 'estatisticas' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>📊 Dashboard</button>
+                <button onClick={() => setActiveTab('militares')} className={`px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap transition-all ${activeTab === 'militares' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>👥 Militares</button>
+                {isAdmin && (
+                  <button onClick={() => setActiveTab('configuracoes')} className={`px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap transition-all ${activeTab === 'configuracoes' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>⚙️ Config</button>
+                )}
+              </div>
+
+              {/* Barra Global de Filtros */}
+              {(activeTab === 'chamada' || activeTab === 'militares') && (
+                <div className="bg-white rounded-t-lg shadow-sm p-3 mt-1 border-b border-slate-200 flex flex-col sm:flex-row gap-2">
+                  <input
+                    type="text"
+                    value={busca}
+                    onChange={(e) => handleBusca(e.target.value)}
+                    placeholder="🔍 Buscar nome..."
+                    className="flex-1 px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white focus:ring-2 focus:ring-indigo-100 transition-colors outline-none"
+                  />
+                  <select value={filtroPosto} onChange={(e) => handleFiltroPosto(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white outline-none">
+                    <option value="">Todos os Postos</option>
+                    {postos.map(p => <option key={p} value={p}>{p}</option>)}
+                  </select>
+                  <select value={filtroSecao} onChange={(e) => handleFiltroSecao(e.target.value)} className="px-3 py-2 border border-slate-300 rounded-lg text-sm bg-slate-50 focus:bg-white outline-none">
+                    <option value="">Todas as Seções</option>
+                    {secoes.map(s => <option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
+              )}
+
+              {/* Conteúdo Dinâmico */}
+              <div className="bg-white rounded-b-lg shadow-lg p-3 sm:p-6 mb-4 min-h-[50vh]">
+                
+                {/* ABA DE ESTATÍSTICAS / DASHBOARD */}
+                {activeTab === 'estatisticas' && (
+                  <div className="space-y-6">
+                    {/* Controles do Gráfico */}
+                    <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between">
+                      <div className="flex bg-white rounded-lg p-1 border border-slate-300 w-full xl:w-auto shadow-sm">
+                         <button onClick={() => setStatsTipo('diario')} className={`flex-1 px-5 py-2.5 rounded-md text-sm font-bold transition-all ${statsTipo==='diario'?'bg-indigo-600 text-white shadow-md':'text-slate-600 hover:bg-slate-100'}`}>Visão Diária</button>
+                         <button onClick={() => setStatsTipo('mensal')} className={`flex-1 px-5 py-2.5 rounded-md text-sm font-bold transition-all ${statsTipo==='mensal'?'bg-indigo-600 text-white shadow-md':'text-slate-600 hover:bg-slate-100'}`}>Visão Mensal</button>
+                      </div>
+                      <div className="flex flex-col sm:flex-row gap-3 w-full xl:w-auto">
+                         {statsTipo === 'diario' ? (
+                            <input type="date" value={statsData} onChange={(e) => setStatsData(e.target.value)} className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium w-full shadow-sm outline-none focus:border-indigo-500" />
+                         ) : (
+                            <input type="month" value={statsMes} onChange={(e) => setStatsMes(e.target.value)} className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium w-full shadow-sm outline-none focus:border-indigo-500" />
+                         )}
+                         <select value={statsSecao} onChange={(e) => setStatsSecao(e.target.value)} className="px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-medium w-full bg-white shadow-sm outline-none focus:border-indigo-500">
+                            <option value="">Filtro: Todas as Seções</option>
+                            {secoes.map(s => <option key={s} value={s}>{s}</option>)}
+                         </select>
+                      </div>
+                    </div>
+
+                    {/* Gráficos Renderizados */}
+                    {(() => {
+                       const { sortedStats, totalGeral, diasContados } = getEstatisticas();
+                       
+                       if (totalGeral === 0) {
+                         return (
+                           <div className="text-center py-20 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl">
+                             <span className="text-5xl block mb-4">📊</span>
+                             <p className="text-slate-600 font-extrabold text-lg">Nenhum registro de chamada encontrado.</p>
+                             <p className="text-slate-400 text-sm mt-2">Altere a data ou limpe os filtros para visualizar os dados.</p>
+                           </div>
+                         );
+                       }
+
+                       return (
+                         <div className="space-y-6 animate-fade-in">
+                           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                              <div className="bg-indigo-50 border border-indigo-200 p-5 rounded-xl text-center shadow-sm">
+                                <p className="text-xs text-indigo-600 font-extrabold uppercase tracking-wide">Ocorrências Totais</p>
+                                <p className="text-4xl font-black text-indigo-900 mt-1">{totalGeral}</p>
+                              </div>
+                              <div className="bg-slate-50 border border-slate-200 p-5 rounded-xl text-center shadow-sm">
+                                <p className="text-xs text-slate-600 font-extrabold uppercase tracking-wide">Dias Computados</p>
+                                <p className="text-4xl font-black text-slate-800 mt-1">{diasContados}</p>
+                              </div>
+                           </div>
+
+                           <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
+                             <h3 className="font-extrabold text-slate-800 mb-6 text-lg flex items-center gap-2">
+                               <span>📈</span> Distribuição do Efetivo
+                             </h3>
+                             <div className="grid gap-5 md:grid-cols-2">
+                               {sortedStats.map(s => {
+                                 const pct = ((s.count / totalGeral) * 100).toFixed(1);
+                                 let colorClass = 'bg-blue-500';
+                                 let bgLight = 'bg-blue-50/50';
+                                 let borderColor = 'border-blue-100';
+                                 
+                                 if (s.status === 'PRESENTE') { colorClass = 'bg-green-500'; bgLight = 'bg-green-50/50'; borderColor='border-green-100'; }
+                                 if (s.status === 'FALTA') { colorClass = 'bg-red-500'; bgLight = 'bg-red-50/50'; borderColor='border-red-100'; }
+                                 if (s.status === 'ATRASADO') { colorClass = 'bg-yellow-500'; bgLight = 'bg-yellow-50/50'; borderColor='border-yellow-100'; }
+                                 if (s.status === 'FÉRIAS' || s.status === 'RECESSO') { colorClass = 'bg-purple-500'; bgLight = 'bg-purple-50/50'; borderColor='border-purple-100'; }
+
+                                 return (
+                                   <div key={s.status} className={`${bgLight} border ${borderColor} p-4 rounded-xl shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5`}>
+                                     <div className="flex justify-between items-end mb-3">
+                                       <span className="font-bold text-slate-700 text-sm uppercase tracking-wide">{s.status}</span>
+                                       <div className="text-right">
+                                         <span className="font-black text-slate-900 text-2xl leading-none">{s.count}</span>
+                                         <span className="text-xs font-bold text-slate-500 ml-1">({pct}%)</span>
+                                       </div>
+                                     </div>
+                                     <div className="w-full bg-slate-200 rounded-full h-2.5 overflow-hidden shadow-inner">
+                                       <div className={`h-2.5 rounded-full ${colorClass} transition-all duration-1000 ease-out`} style={{ width: `${pct}%` }}></div>
+                                     </div>
+                                   </div>
+                                 )
+                               })}
+                             </div>
+                           </div>
+                         </div>
+                       );
+                    })()}
+                  </div>
+                )}
+
+                {activeTab === 'chamada' && (
+                  <div className="space-y-4">
+                    <div className="bg-gradient-to-r from-slate-50 to-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+                      <div className="flex gap-3 flex-col md:flex-row justify-between items-end md:items-center">
+                        <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
+                          <div>
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1">Data da Chamada</label>
+                            <input
+                              type="date"
+                              value={selectedDate}
+                              onChange={(e) => setSelectedDate(e.target.value)}
+                              className="px-4 py-2 border-2 border-blue-300 rounded-lg font-bold text-sm text-slate-700 outline-none focus:border-blue-500 w-full"
+                            />
+                          </div>
+                          <div className="flex gap-6 items-center">
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Dia</p>
+                              <p className="font-black text-slate-800 capitalize text-sm">{dayName.split('-')[0]}</p>
+                            </div>
+                            <div>
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Expediente</p>
+                              <p className="font-black text-slate-800 text-sm">{expediente.inicio} às {expediente.fim}</p>
+                            </div>
+                            <div className="hidden sm:block">
+                              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-1">Listados</p>
+                              <p className="font-black text-blue-600 text-sm">{militaresFiltrados.length}</p>
+                            </div>
+                          </div>
+                        </div>
+                        <button
+                          onClick={exportarParaPDF}
+                          className="w-full md:w-auto bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 border border-slate-700"
+                        >
+                          🖨️ Imprimir PDF
+                        </button>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3 mt-2">
+                      <div className="grid gap-3 max-h-[60vh] overflow-y-auto pb-4 pr-2 custom-scrollbar">
+                        {militaresFiltrados.map((militar) => {
+                          const dados = chamadaDia[militar.nome] || { status: 'PRESENTE', horario: '', observacao: '' };
+                          return (
+                            <div key={militar.id} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow group">
+                              <div className="flex justify-between items-start mb-3">
+                                <div>
+                                  <p className="font-black text-base text-slate-800">{militar.nome}</p>
+                                  <p className="text-xs font-bold text-slate-400 uppercase tracking-wide mt-0.5">
+                                    {militar.post} {militar.secao ? `• ${militar.secao}` : ''}
+                                  </p>
+                                </div>
+                                <span className={`text-[10px] font-extrabold text-white px-3 py-1.5 rounded-md shadow-sm tracking-widest uppercase ${
+                                  dados.status === 'PRESENTE' ? 'bg-green-500' :
+                                  dados.status === 'ATRASADO' ? 'bg-yellow-500' :
+                                  dados.status === 'FALTA' ? 'bg-red-500' : 'bg-slate-600'
+                                }`}>
+                                  {dados.status}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-2 items-center bg-slate-50 p-2 rounded-lg border border-slate-100 group-hover:bg-blue-50/30 transition-colors">
+                                <select
+                                  value={dados.status}
+                                  onChange={(e) => salvarChamada(selectedDate, militar.nome, e.target.value, dados.horario, dados.observacao)}
+                                  className="min-w-[140px] px-3 py-2 border border-slate-300 rounded-md font-bold text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                                >
+                                  <option value="PRESENTE">PRESENTE</option>
+                                  <option value="FALTA">FALTA</option>
+                                  <option value="ATRASADO">ATRASADO</option>
+                                  <option value="ESV">ESV</option>
+                                  <option value="SSV">SSV</option>
+                                  <option value="DISP TOTAL">DISP TOTAL</option>
+                                  <option value="DISP PARCIAL">DISP PARCIAL</option>
+                                  <option value="FORMATURA">FORMATURA</option>
+                                  <option value="DISP MÉD">DISP MÉD</option>
+                                  <option value="DISP INSTALAÇÃO">DISP INSTALAÇÃO</option>
+                                  <option value="DISP TRANSITO">DISP TRANSITO</option>
+                                  <option value="CURSO">CURSO</option>
+                                  <option value="MISSÃO">MISSÃO</option>
+                                  <option value="HACO">HACO</option>
+                                  <option value="JRS">JRS</option>
+                                  <option value="LUTO">LUTO</option>
+                                  <option value="NÚPCIAS">NÚPCIAS</option>
+                                  <option value="PRESO">PRESO</option>
+                                  <option value="PSF">PSF</option>
+                                  <option value="SOMBRA">SOMBRA</option>
+                                  <option value="COMISSÃO">COMISSÃO</option>
+                                  <option value="TACF">TACF</option>
+                                  <option value="RECESSO">RECESSO</option>
+                                  <option value="FÉRIAS">FÉRIAS</option>
+                                  <option value="LICENSA PATERNIDADE">LICENSA PATERNIDADE</option>
+                                  <option value="DOAR SANGUE">DOAR SANGUE</option>
+                                  <option value="REUNIÃO">REUNIÃO</option>
+                                  <option value="AGDL">AGDL</option>
+                                </select>
+                                {(dados.status === 'PRESENTE' || dados.status === 'ATRASADO') && (
+                                  <input
+                                    type="time"
+                                    value={dados.horario}
+                                    onChange={(e) => salvarChamada(selectedDate, militar.nome, dados.status, e.target.value, dados.observacao)}
+                                    className="w-26 px-3 py-2 border border-slate-300 rounded-md font-bold text-xs text-slate-700 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                                  />
+                                )}
+                                <input
+                                  type="text"
+                                  value={dados.observacao}
+                                  onChange={(e) => salvarChamada(selectedDate, militar.nome, dados.status, dados.horario, e.target.value)}
+                                  placeholder="Inserir observação..."
+                                  className="flex-1 min-w-[150px] px-3 py-2 border border-slate-300 rounded-md font-medium text-xs placeholder:text-slate-400 outline-none focus:ring-2 focus:ring-blue-400 bg-white"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                        {militaresFiltrados.length === 0 && (
+                           <div className="text-center py-16 text-slate-400 font-bold border-2 border-dashed rounded-xl border-slate-200">
+                              Nenhum militar atende aos filtros atuais.
+                           </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'militares' && (
+                  <div className="space-y-4">
+                    {isAdmin && (
+                      <div className="bg-slate-50 p-5 rounded-xl border border-slate-200 shadow-sm flex gap-3 flex-col lg:flex-row items-end">
+                        <div className="w-full lg:flex-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Nome Completo</label>
+                          <input
+                            type="text"
+                            value={novoMilitar.nome}
+                            onChange={(e) => setNovoMilitar({ ...novoMilitar, nome: e.target.value })}
+                            placeholder="Ex: SILVA SAURO"
+                            className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 focus:outline-none focus:border-indigo-500 bg-white"
+                          />
+                        </div>
+                        <div className="flex gap-3 w-full lg:w-auto">
+                          <div className="w-1/3 lg:w-32">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Posto</label>
+                            <select value={novoMilitar.post} onChange={(e) => setNovoMilitar({ ...novoMilitar, post: e.target.value })} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 bg-white outline-none focus:border-indigo-500">
+                              {postos.map(post => <option key={post} value={post}>{post}</option>)}
+                            </select>
+                          </div>
+                          <div className="flex-1 lg:w-48">
+                            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Seção</label>
+                            <select value={novoMilitar.secao} onChange={(e) => setNovoMilitar({ ...novoMilitar, secao: e.target.value })} className="w-full px-4 py-2.5 border border-slate-300 rounded-lg text-sm font-bold text-slate-700 bg-white outline-none focus:border-indigo-500">
+                              <option value="">Nenhuma</option>
+                              {secoes.map(s => <option key={s} value={s}>{s}</option>)}
+                            </select>
+                          </div>
+                          <button onClick={adicionarMilitar} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2.5 rounded-lg font-extrabold text-sm shadow-md transition-transform active:scale-95 h-[42px] self-end">
+                            ADICIONAR
+                          </button>
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="space-y-2 mt-4">
+                      {militaresPaginados.map((militar, index) => {
+                        const isDragPermitido = isAdmin && busca === '' && filtroPosto === '' && filtroSecao === '' && paginaAtual === 1;
+
+                        return (
+                          <div
+                            key={militar.id}
+                            draggable={isDragPermitido}
+                            onDragStart={(e) => {
+                              setDraggedId(militar.id);
+                              e.dataTransfer.effectAllowed = 'move';
+                            }}
+                            onDragOver={(e) => {
+                              e.preventDefault(); 
+                              if (militar.id !== draggedId) setDragOverId(militar.id);
+                            }}
+                            onDragLeave={() => setDragOverId(null)}
+                            onDrop={(e) => {
+                              e.preventDefault();
+                              setDragOverId(null);
+                              if (!draggedId || draggedId === militar.id) return;
+
+                              const fromIndex = militares.findIndex(m => m.id === draggedId);
+                              const toIndex = militares.findIndex(m => m.id === militar.id);
+
+                              const novaLista = [...militares];
+                              const [removido] = novaLista.splice(fromIndex, 1);
+                              novaLista.splice(toIndex, 0, removido);
+
+                              setMilitares(novaLista);
+                              setDraggedId(null);
+                            }}
+                            onDragEnd={() => { setDraggedId(null); setDragOverId(null); }}
+                            className={`bg-white border rounded-xl p-3.5 flex items-center justify-between gap-3 transition-all duration-200
+                              ${draggedId === militar.id ? 'opacity-40 scale-95 border-dashed border-indigo-400 bg-indigo-50' : 'border-slate-200 shadow-sm hover:shadow-md'}
+                              ${dragOverId === militar.id ? 'border-t-4 border-t-indigo-500 translate-y-1' : ''}
+                              ${isDragPermitido ? 'cursor-grab active:cursor-grabbing hover:border-indigo-300' : ''}
+                            `}
+                          >
+                            <div className="flex items-center gap-4 flex-1 min-w-0">
+                              {isDragPermitido && (
+                                <div className="text-slate-300 text-2xl cursor-grab active:cursor-grabbing hover:text-indigo-600 px-1 transition-colors" title="Arraste para reorganizar">⠿</div>
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-extrabold text-sm text-slate-800 truncate">{militar.nome}</p>
+                                <p className="text-[11px] font-bold text-slate-400 tracking-wide uppercase mt-0.5">
+                                  {militar.post} {militar.secao ? `• ${militar.secao}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                            
+                            <div className="flex gap-2 items-center flex-shrink-0">
+                              {isAdmin && (
+                                <>
+                                  <button onClick={() => editarMilitar(militar.id)} className="bg-slate-100 hover:bg-indigo-100 text-indigo-700 px-4 py-2 rounded-lg text-xs font-bold transition-colors">Editar</button>
+                                  <button onClick={() => deletarMilitar(militar.id)} className="bg-slate-100 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-bold transition-colors" title="Excluir">🗑️</button>
+                                </>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {militaresPaginados.length === 0 && (
+                           <div className="text-center py-16 text-slate-400 font-bold border-2 border-dashed rounded-xl border-slate-200">
+                              Nenhum militar na lista.
+                           </div>
+                      )}
+                    </div>
+
+                    {totalPaginas > 1 && (
+                      <div className="flex justify-between items-center mt-6 bg-slate-50 p-3 rounded-xl border border-slate-200">
+                        <button 
+                          onClick={() => setPaginaAtual(p => Math.max(1, p - 1))} 
+                          disabled={paginaAtual === 1} 
+                          className="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                        >
+                          ◀ Anterior
+                        </button>
+                        <span className="text-xs font-extrabold text-slate-500 uppercase tracking-widest">
+                          Página {paginaAtual} de {totalPaginas}
+                        </span>
+                        <button 
+                          onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))} 
+                          disabled={paginaAtual === totalPaginas} 
+                          className="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
+                        >
+                          Próxima ▶
+                        </button>
+                      </div>
+                    )}
+
+                    {militarEmEdicao && isAdmin && (
+                      <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                        <div className="bg-white rounded-2xl p-7 max-w-sm w-full shadow-2xl border border-slate-100">
+                          <h3 className="font-black text-xl mb-5 text-slate-800 flex items-center gap-2"><span className="text-indigo-600">✏️</span> Editar Militar</h3>
+                          
+                          <div className="space-y-4 mb-6">
+                            <div>
+                              <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Nome Completo</label>
+                              <input type="text" value={militarEmEdicao.nome} onChange={(e) => setMilitarEmEdicao({ ...militarEmEdicao, nome: e.target.value })} className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-indigo-500 outline-none transition-colors" />
+                            </div>
+                            
+                            <div className="grid grid-cols-2 gap-3">
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Posto</label>
+                                <select value={militarEmEdicao.post} onChange={(e) => setMilitarEmEdicao({ ...militarEmEdicao, post: e.target.value })} className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-indigo-500 outline-none bg-white">
+                                  {postos.map(post => <option key={post} value={post}>{post}</option>)}
+                                </select>
+                              </div>
+                              <div>
+                                <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Seção</label>
+                                <select value={militarEmEdicao.secao || ''} onChange={(e) => setMilitarEmEdicao({ ...militarEmEdicao, secao: e.target.value })} className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-indigo-500 outline-none bg-white">
+                                  <option value="">Nenhuma</option>
+                                  {secoes.map(s => <option key={s} value={s}>{s}</option>)}
+                                </select>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          <div className="flex gap-3">
+                            <button onClick={() => setMilitarEmEdicao(null)} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold text-sm transition-colors border border-slate-300">Cancelar</button>
+                            <button onClick={salvarEdicao} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-colors">Confirmar</button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'configuracoes' && isAdmin && (
+                  <div className="space-y-6">
+                    <div className="bg-gradient-to-br from-slate-50 to-blue-50/30 border border-slate-200 p-6 rounded-2xl shadow-sm">
+                      <p className="font-black text-sm mb-4 text-slate-800 flex items-center gap-2"><span>📸</span> Identidade Visual (Logo do Login/PDF)</p>
+                      <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+                        {fotoApp ? (
+                          <div className="relative group">
+                            <img src={fotoApp} alt="Foto" className="w-24 h-24 rounded-xl object-contain border-2 border-white shadow-md bg-white p-1" />
+                            <button onClick={removerFoto} className="absolute -top-2 -right-2 bg-red-500 text-white p-1.5 rounded-full shadow-lg hover:bg-red-600 transition transform hover:scale-110" title="Remover Logo">✕</button>
+                          </div>
+                        ) : (
+                          <div className="w-24 h-24 rounded-xl border-2 border-dashed border-slate-300 bg-slate-100 flex items-center justify-center text-slate-400 text-2xl">🛡️</div>
+                        )}
+                        <div className="flex flex-col justify-center sm:h-24">
+                          <label className="bg-white border border-slate-300 hover:bg-slate-50 text-slate-700 px-5 py-2.5 rounded-lg font-bold text-sm cursor-pointer shadow-sm transition-colors">
+                            Substituir Imagem
+                            <input type="file" accept="image/*" onChange={handleFotoUpload} className="hidden" />
+                          </label>
+                          <p className="text-[10px] text-slate-400 font-medium mt-2">Recomendado: Fundo transparente (PNG)</p>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="bg-white border border-slate-200 p-6 rounded-2xl shadow-sm">
+                      <h3 className="font-black text-lg mb-5 text-slate-800 flex items-center gap-2"><span>👥</span> Controle de Acesso e Segurança</h3>
+                      
+                      <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 mb-6">
+                        <p className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Novo Usuário</p>
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          <input type="email" placeholder="Email (usuario@fab)" value={newUserEmail} onChange={e => setNewUserEmail(e.target.value)} className="p-2.5 border border-slate-300 focus:border-indigo-500 outline-none rounded-lg text-sm bg-white font-medium" />
+                          <input type="password" placeholder="Senha provisória" value={newUserPassword} onChange={e => setNewUserPassword(e.target.value)} className="p-2.5 border border-slate-300 focus:border-indigo-500 outline-none rounded-lg text-sm bg-white font-medium" />
+                          <input type="text" placeholder="Nome Exibição (Guerra)" value={newUserNomeGuerra} onChange={e => setNewUserNomeGuerra(e.target.value)} className="p-2.5 border border-slate-300 focus:border-indigo-500 outline-none rounded-lg text-sm bg-white font-medium" />
+                          <select value={newUserRole} onChange={e => setNewUserRole(e.target.value)} className="p-2.5 border border-slate-300 focus:border-indigo-500 outline-none rounded-lg text-sm bg-white font-bold text-slate-700">
+                            <option value="user">Visualizador / Operador</option>
+                            <option value="admin">Administrador (Total)</option>
+                          </select>
+                        </div>
+                        <button onClick={criarUsuario} className="mt-3 w-full bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-md transition-colors">Criar Credencial</button>
+                      </div>
+                      
+                      <div>
+                        <h4 className="mb-3 font-bold text-[11px] text-slate-400 uppercase tracking-widest">Base de Usuários Ativos</h4>
+                        <div className="space-y-2 max-h-[40vh] overflow-y-auto pr-2 custom-scrollbar">
+                          {usersList.map(u => (
+                            <div key={u.id} className="bg-white border border-slate-200 hover:border-slate-300 p-4 rounded-xl flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 transition-colors shadow-sm">
+                              <div>
+                                <p className="font-extrabold text-slate-800 text-sm flex items-center gap-2">
+                                  {u.nomeGuerra || u.email} 
+                                  <span className={`px-2 py-0.5 rounded-md text-[9px] text-white tracking-wider ${u.role === 'admin' ? 'bg-indigo-600' : 'bg-slate-400'}`}>{u.role.toUpperCase()}</span>
+                                </p>
+                                <p className="text-xs font-medium text-slate-500 mt-0.5">{u.email}</p>
+                              </div>
+                              <div className="flex gap-2 w-full sm:w-auto">
+                                <button onClick={() => { setEditUserId(u.id); setEditNomeGuerra(u.nomeGuerra || ''); setEditUserRole(u.role || 'user'); }} className="flex-1 sm:flex-none bg-slate-100 hover:bg-indigo-50 text-indigo-700 border border-slate-200 hover:border-indigo-200 px-4 py-2 rounded-lg text-xs font-bold transition-colors">Editar</button>
+                                <button onClick={() => deletarUsuario(u.id, u.nomeGuerra || u.email)} className="flex-1 sm:flex-none bg-slate-100 hover:bg-red-50 text-red-600 border border-slate-200 hover:border-red-200 px-4 py-2 rounded-lg text-xs font-bold transition-colors">Excluir</button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal para editar Usuário */}
+            {editUserId && (
+              <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
+                <div className="bg-white rounded-2xl p-7 max-w-sm w-full shadow-2xl border border-slate-100">
+                  <h3 className="font-black text-xl mb-5 text-slate-800 flex items-center gap-2"><span className="text-indigo-600">⚙️</span> Configurar Acesso</h3>
+                  
+                  <div className="space-y-4 mb-6">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Identificação Visual</label>
+                      <input type="text" value={editNomeGuerra} onChange={(e) => setEditNomeGuerra(e.target.value)} placeholder="Ex: 3S SILVA" className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-bold text-slate-800 focus:border-indigo-500 outline-none transition-colors" />
+                    </div>
+                    
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest block mb-1.5">Nível de Permissão</label>
+                      <select value={editUserRole} onChange={(e) => setEditUserRole(e.target.value)} className="w-full px-4 py-3 border-2 border-slate-200 rounded-xl text-sm font-bold focus:border-indigo-500 outline-none bg-white text-slate-700">
+                        <option value="user">Usuário Padrão (Sem gerência)</option>
+                        <option value="admin">Administrador Global</option>
+                      </select>
+                    </div>
+                  </div>
+                  
+                  <div className="flex gap-3">
+                    <button onClick={() => { setEditUserId(null); setEditNomeGuerra(''); setEditUserRole('user'); }} className="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-3 rounded-xl font-bold text-sm transition-colors border border-slate-300">Cancelar</button>
+                    <button onClick={editarUsuario} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-3 rounded-xl font-bold text-sm shadow-lg shadow-indigo-200 transition-colors">Salvar Alterações</button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Elemento de CSS Adicional (Scrollbar) */}
+            <style dangerouslySetInnerHTML={{__html: `
+              .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
+              @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+            `}} />
+
+            {/* Rodapé fixo ajustado */}
+            <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 text-center py-3 text-[10px] shadow-lg z-50 border-t border-slate-800 uppercase tracking-widest font-bold flex justify-center items-center gap-2">
+              Desenvolvido por 3S SGS OSCAR <span className="w-1 h-1 bg-slate-600 rounded-full"></span> v3.0
+            </footer>
+          </div>
+        );
+      }
+
+      const root = ReactDOM.createRoot(document.getElementById('root'));
+      root.render(<EfetivoApp />);
+    </script>
+</body>
+</html>
