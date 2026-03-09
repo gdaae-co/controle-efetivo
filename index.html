@@ -85,12 +85,10 @@
         const [novoMilitar, setNovoMilitar] = useState({ nome: '', post: 'S1', secao: '' });
         const [militarEmEdicao, setMilitarEmEdicao] = useState(null);
         
-        // Filtros e Paginação
+        // Filtros (Sem Paginação)
         const [busca, setBusca] = useState('');
         const [filtroPosto, setFiltroPosto] = useState('');
         const [filtroSecao, setFiltroSecao] = useState('');
-        const [paginaAtual, setPaginaAtual] = useState(1);
-        const itensPorPagina = 15;
 
         // Dashboard (Estatísticas)
         const [statsTipo, setStatsTipo] = useState('diario');
@@ -188,31 +186,22 @@
           return date.getDay() === 5 ? { inicio: '08:00', fim: '12:00' } : { inicio: '09:00', fim: '17:00' };
         };
 
-        // NOVA LÓGICA: Resolve o Bug da Sobrescrita
         const getChamadaDodia = (date) => {
-          // Se já existir dados carregados do banco para esse dia, usa eles
           if (chamadas[date]) return chamadas[date];
-          
-          // Se não existir, constrói visualmente os presentes sem salvar no banco
           const inicial = {};
           militares.forEach(m => { inicial[m.nome] = { status: 'PRESENTE', horario: '', observacao: '' }; });
           return inicial;
         };
 
-        // NOVA LÓGICA: Atualiza apenas localmente quando muda o Select
         const salvarChamada = (date, militar, status, horario = '', observacao = '') => {
           const novaChamada = { ...chamadas };
-          
-          // Se o dia ainda não existe no estado, inicializa com os "Presentes" base
           if (!novaChamada[date]) {
             novaChamada[date] = getChamadaDodia(date);
           }
-          
           novaChamada[date][militar] = { status, horario, observacao };
           setChamadas(novaChamada);
         };
 
-        // NOVA FUNÇÃO: Botão Salvar Chamada
         const salvarChamadaNoBanco = () => {
           if (!user) return;
           const dadosDoDia = getChamadaDodia(selectedDate);
@@ -407,17 +396,14 @@
           return matchBusca && matchPosto && matchSecao;
         });
 
-        const totalPaginas = Math.ceil(militaresFiltrados.length / itensPorPagina);
-        const militaresPaginados = militaresFiltrados.slice((paginaAtual - 1) * itensPorPagina, paginaAtual * itensPorPagina);
-
-        const handleBusca = (v) => { setBusca(v); setPaginaAtual(1); };
-        const handleFiltroPosto = (v) => { setFiltroPosto(v); setPaginaAtual(1); };
-        const handleFiltroSecao = (v) => { setFiltroSecao(v); setPaginaAtual(1); };
+        // Removidos manipuladores que chamavam setPaginaAtual(1)
+        const handleBusca = (v) => { setBusca(v); };
+        const handleFiltroPosto = (v) => { setFiltroPosto(v); };
+        const handleFiltroSecao = (v) => { setFiltroSecao(v); };
 
         if (!user) {
           return (
             <div className="min-h-screen flex bg-slate-900 font-sans">
-              
               <div 
                 className="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center bg-slate-900"
                 style={{
@@ -428,7 +414,6 @@
                 }}
               >
                 <div className="scanner-line"></div>
-
                 <div className="relative z-20 text-center px-12">
                   <h2 
                     className="text-6xl xl:text-7xl font-black mb-4 tracking-tight text-white"
@@ -452,7 +437,6 @@
 
               <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-slate-50 relative shadow-[-10px_0_30px_rgba(0,0,0,0.3)] z-30">
                 <div className="max-w-md w-full space-y-8 relative z-10">
-                  
                   <div className="text-center">
                     {fotoApp ? (
                       <img src={fotoApp} alt="Logo GDAAE" className="mx-auto h-28 w-28 object-contain rounded-2xl shadow-lg border-4 border-white bg-white" />
@@ -470,7 +454,6 @@
                   </div>
 
                   <div className="mt-8 bg-white py-8 px-6 shadow-2xl rounded-3xl border border-slate-100 sm:px-10">
-                    
                     {error && (
                       <div className="mb-6 bg-red-50 border-l-4 border-red-500 p-4 rounded-r-lg">
                         <div className="flex items-center">
@@ -491,7 +474,6 @@
                           placeholder="usuario@fab.mil.br"
                         />
                       </div>
-
                       <div>
                         <label className="block text-xs font-bold text-slate-500 mb-2 uppercase tracking-wide">Senha Pessoal</label>
                         <input
@@ -502,7 +484,6 @@
                           placeholder="••••••••"
                         />
                       </div>
-
                       <div className="pt-2">
                         <button
                           onClick={() => auth.signInWithEmailAndPassword(email, password).catch(err => setError(err.message))}
@@ -520,7 +501,6 @@
                     </div>
                   </div>
                 </div>
-                
                 <div className="absolute bottom-6 text-center w-full px-6 flex justify-center items-center gap-2">
                    <p className="text-xs font-bold text-slate-400">Desenvolvido por 3S SGS OSCAR • v3.0</p>
                 </div>
@@ -536,7 +516,6 @@
 
         return (
           <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 pb-20 relative">
-            {/* Header */}
             <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white sticky top-0 z-40 shadow-lg">
               <div className="px-4 py-4 sm:py-6">
                 <div className="flex items-center gap-3 flex-wrap">
@@ -567,7 +546,6 @@
               </div>
             </div>
 
-            {/* Tabs */}
             <div className="px-2 sm:px-4 mt-4">
               <div className="flex gap-1 bg-white rounded-lg shadow-md p-2 border-b-4 border-slate-900 overflow-x-auto">
                 <button onClick={() => setActiveTab('chamada')} className={`px-3 py-2 sm:px-4 sm:py-3 rounded-lg font-semibold text-xs sm:text-sm whitespace-nowrap transition-all ${activeTab === 'chamada' ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'}`}>📋 Chamada</button>
@@ -578,7 +556,6 @@
                 )}
               </div>
 
-              {/* Barra Global de Filtros */}
               {(activeTab === 'chamada' || activeTab === 'militares') && (
                 <div className="bg-white rounded-t-lg shadow-sm p-3 mt-1 border-b border-slate-200 flex flex-col sm:flex-row gap-2">
                   <input
@@ -599,10 +576,8 @@
                 </div>
               )}
 
-              {/* Conteúdo Dinâmico */}
               <div className="bg-white rounded-b-lg shadow-lg p-3 sm:p-6 mb-4 min-h-[50vh]">
                 
-                {/* ABA DE ESTATÍSTICAS / DASHBOARD */}
                 {activeTab === 'estatisticas' && (
                   <div className="space-y-6">
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between">
@@ -625,7 +600,6 @@
 
                     {(() => {
                        const { sortedStats, totalGeral, diasContados } = getEstatisticas();
-                       
                        if (totalGeral === 0) {
                          return (
                            <div className="text-center py-20 bg-slate-50 border-2 border-dashed border-slate-300 rounded-xl">
@@ -635,7 +609,6 @@
                            </div>
                          );
                        }
-
                        return (
                          <div className="space-y-6 animate-fade-in">
                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -648,7 +621,6 @@
                                 <p className="text-4xl font-black text-slate-800 mt-1">{diasContados}</p>
                               </div>
                            </div>
-
                            <div className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
                              <h3 className="font-extrabold text-slate-800 mb-6 text-lg flex items-center gap-2">
                                <span>📈</span> Distribuição do Efetivo
@@ -656,10 +628,7 @@
                              <div className="grid gap-5 md:grid-cols-2">
                                {sortedStats.map(s => {
                                  const pct = ((s.count / totalGeral) * 100).toFixed(1);
-                                 let colorClass = 'bg-blue-500';
-                                 let bgLight = 'bg-blue-50/50';
-                                 let borderColor = 'border-blue-100';
-                                 
+                                 let colorClass = 'bg-blue-500'; let bgLight = 'bg-blue-50/50'; let borderColor = 'border-blue-100';
                                  if (s.status === 'PRESENTE') { colorClass = 'bg-green-500'; bgLight = 'bg-green-50/50'; borderColor='border-green-100'; }
                                  if (s.status === 'FALTA') { colorClass = 'bg-red-500'; bgLight = 'bg-red-50/50'; borderColor='border-red-100'; }
                                  if (s.status === 'ATRASADO') { colorClass = 'bg-yellow-500'; bgLight = 'bg-yellow-50/50'; borderColor='border-yellow-100'; }
@@ -691,8 +660,6 @@
                 {activeTab === 'chamada' && (
                   <div className="space-y-4">
                     <div className="bg-gradient-to-r from-slate-50 to-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm">
-                      
-                      {/* BOTÕES DE AÇÃO: AQUI ESTÁ A GRANDE MUDANÇA VISUAL */}
                       <div className="flex gap-3 flex-col md:flex-row justify-between items-end md:items-center">
                         <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
                           <div>
@@ -735,7 +702,6 @@
                           </button>
                         </div>
                       </div>
-
                     </div>
                     
                     <div className="space-y-3 mt-2">
@@ -858,9 +824,9 @@
                       </div>
                     )}
 
-                    <div className="space-y-2 mt-4">
-                      {militaresPaginados.map((militar, index) => {
-                        const isDragPermitido = isAdmin && busca === '' && filtroPosto === '' && filtroSecao === '' && paginaAtual === 1;
+                    <div className="space-y-2 mt-4 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
+                      {militaresFiltrados.map((militar, index) => {
+                        const isDragPermitido = isAdmin && busca === '' && filtroPosto === '' && filtroSecao === '';
 
                         return (
                           <div
@@ -920,34 +886,12 @@
                           </div>
                         );
                       })}
-                      {militaresPaginados.length === 0 && (
+                      {militaresFiltrados.length === 0 && (
                            <div className="text-center py-16 text-slate-400 font-bold border-2 border-dashed rounded-xl border-slate-200">
                               Nenhum militar na lista.
                            </div>
                       )}
                     </div>
-
-                    {totalPaginas > 1 && (
-                      <div className="flex justify-between items-center mt-6 bg-slate-50 p-3 rounded-xl border border-slate-200">
-                        <button 
-                          onClick={() => setPaginaAtual(p => Math.max(1, p - 1))} 
-                          disabled={paginaAtual === 1} 
-                          className="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
-                        >
-                          ◀ Anterior
-                        </button>
-                        <span className="text-xs font-extrabold text-slate-500 uppercase tracking-widest">
-                          Página {paginaAtual} de {totalPaginas}
-                        </span>
-                        <button 
-                          onClick={() => setPaginaAtual(p => Math.min(totalPaginas, p + 1))} 
-                          disabled={paginaAtual === totalPaginas} 
-                          className="px-5 py-2.5 bg-white border border-slate-300 text-slate-700 rounded-lg shadow-sm font-bold text-sm disabled:opacity-40 disabled:cursor-not-allowed hover:bg-slate-100 transition-colors"
-                        >
-                          Próxima ▶
-                        </button>
-                      </div>
-                    )}
 
                     {militarEmEdicao && isAdmin && (
                       <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
@@ -1053,7 +997,6 @@
               </div>
             </div>
 
-            {/* Modal para editar Usuário */}
             {editUserId && (
               <div className="fixed inset-0 bg-slate-900/80 flex items-center justify-center z-50 p-4 backdrop-blur-sm">
                 <div className="bg-white rounded-2xl p-7 max-w-sm w-full shadow-2xl border border-slate-100">
