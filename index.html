@@ -188,23 +188,45 @@
           return date.getDay() === 5 ? { inicio: '08:00', fim: '12:00' } : { inicio: '09:00', fim: '17:00' };
         };
 
+        // NOVA LÓGICA: Resolve o Bug da Sobrescrita
         const getChamadaDodia = (date) => {
-          if (!chamadas[date]) {
-            const inicial = {};
-            militares.forEach(m => { inicial[m.nome] = { status: 'PRESENTE', horario: '', observacao: '' }; });
-            setChamadas(prev => ({ ...prev, [date]: inicial }));
-            if (user) db.collection("usuarios").doc(user.uid).collection("dados").doc("chamadas").set({ ...chamadas, [date]: inicial }, { merge: true });
-            return inicial;
-          }
-          return chamadas[date];
+          // Se já existir dados carregados do banco para esse dia, usa eles
+          if (chamadas[date]) return chamadas[date];
+          
+          // Se não existir, constrói visualmente os presentes sem salvar no banco
+          const inicial = {};
+          militares.forEach(m => { inicial[m.nome] = { status: 'PRESENTE', horario: '', observacao: '' }; });
+          return inicial;
         };
 
+        // NOVA LÓGICA: Atualiza apenas localmente quando muda o Select
         const salvarChamada = (date, militar, status, horario = '', observacao = '') => {
           const novaChamada = { ...chamadas };
-          if (!novaChamada[date]) novaChamada[date] = {};
+          
+          // Se o dia ainda não existe no estado, inicializa com os "Presentes" base
+          if (!novaChamada[date]) {
+            novaChamada[date] = getChamadaDodia(date);
+          }
+          
           novaChamada[date][militar] = { status, horario, observacao };
           setChamadas(novaChamada);
-          if (user) db.collection("usuarios").doc(user.uid).collection("dados").doc("chamadas").set(novaChamada, { merge: true });
+        };
+
+        // NOVA FUNÇÃO: Botão Salvar Chamada
+        const salvarChamadaNoBanco = () => {
+          if (!user) return;
+          const dadosDoDia = getChamadaDodia(selectedDate);
+          const novaChamada = { ...chamadas, [selectedDate]: dadosDoDia };
+          setChamadas(novaChamada);
+          
+          db.collection("usuarios").doc(user.uid).collection("dados").doc("chamadas")
+            .set({ [selectedDate]: dadosDoDia }, { merge: true })
+            .then(() => {
+                alert('Chamada do dia ' + new Date(selectedDate + 'T00:00:00').toLocaleDateString('pt-BR') + ' salva com sucesso!');
+            })
+            .catch(error => {
+                alert('Erro ao salvar a chamada: ' + error.message);
+            });
         };
 
         const adicionarMilitar = () => {
@@ -392,28 +414,21 @@
         const handleFiltroPosto = (v) => { setFiltroPosto(v); setPaginaAtual(1); };
         const handleFiltroSecao = (v) => { setFiltroSecao(v); setPaginaAtual(1); };
 
-        // ==========================================
-        // TELA DE LOGIN RESTAURADA COM LUZ TOTAL
-        // ==========================================
         if (!user) {
           return (
             <div className="min-h-screen flex bg-slate-900 font-sans">
               
-              {/* Lado Esquerdo - Fundo Tecnológico C2 TOTALMENTE CLARO */}
               <div 
                 className="hidden lg:flex lg:w-1/2 relative overflow-hidden items-center justify-center bg-slate-900"
                 style={{
-                  /* Removida a opacidade escura. Agora o filtro é levíssimo (10% a 30%) apenas para evitar que o texto branco suma */
                   backgroundImage: `linear-gradient(rgba(11, 25, 44, 0.1), rgba(11, 25, 44, 0.3)), url('https://images.unsplash.com/photo-1451187580459-43490279c0fa?q=80&w=1920&auto=format&fit=crop')`,
                   backgroundSize: 'cover',
                   backgroundPosition: 'center',
                   backgroundRepeat: 'no-repeat'
                 }}
               >
-                {/* Linha de Scanner Animada */}
                 <div className="scanner-line"></div>
 
-                {/* Texto sobreposto com Sombras Fortes para manter a legibilidade no fundo claro */}
                 <div className="relative z-20 text-center px-12">
                   <h2 
                     className="text-6xl xl:text-7xl font-black mb-4 tracking-tight text-white"
@@ -435,11 +450,9 @@
                 </div>
               </div>
 
-              {/* Lado Direito - Formulário */}
               <div className="w-full lg:w-1/2 flex items-center justify-center p-6 sm:p-12 bg-slate-50 relative shadow-[-10px_0_30px_rgba(0,0,0,0.3)] z-30">
                 <div className="max-w-md w-full space-y-8 relative z-10">
                   
-                  {/* Cabeçalho do Form */}
                   <div className="text-center">
                     {fotoApp ? (
                       <img src={fotoApp} alt="Logo GDAAE" className="mx-auto h-28 w-28 object-contain rounded-2xl shadow-lg border-4 border-white bg-white" />
@@ -456,7 +469,6 @@
                     </p>
                   </div>
 
-                  {/* Caixa do Formulário */}
                   <div className="mt-8 bg-white py-8 px-6 shadow-2xl rounded-3xl border border-slate-100 sm:px-10">
                     
                     {error && (
@@ -593,7 +605,6 @@
                 {/* ABA DE ESTATÍSTICAS / DASHBOARD */}
                 {activeTab === 'estatisticas' && (
                   <div className="space-y-6">
-                    {/* Controles do Gráfico */}
                     <div className="bg-slate-50 p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col xl:flex-row gap-4 items-center justify-between">
                       <div className="flex bg-white rounded-lg p-1 border border-slate-300 w-full xl:w-auto shadow-sm">
                          <button onClick={() => setStatsTipo('diario')} className={`flex-1 px-5 py-2.5 rounded-md text-sm font-bold transition-all ${statsTipo==='diario'?'bg-indigo-600 text-white shadow-md':'text-slate-600 hover:bg-slate-100'}`}>Visão Diária</button>
@@ -612,7 +623,6 @@
                       </div>
                     </div>
 
-                    {/* Gráficos Renderizados */}
                     {(() => {
                        const { sortedStats, totalGeral, diasContados } = getEstatisticas();
                        
@@ -681,6 +691,8 @@
                 {activeTab === 'chamada' && (
                   <div className="space-y-4">
                     <div className="bg-gradient-to-r from-slate-50 to-blue-50 p-4 rounded-xl border border-blue-200 shadow-sm">
+                      
+                      {/* BOTÕES DE AÇÃO: AQUI ESTÁ A GRANDE MUDANÇA VISUAL */}
                       <div className="flex gap-3 flex-col md:flex-row justify-between items-end md:items-center">
                         <div className="flex flex-col sm:flex-row gap-4 w-full md:w-auto">
                           <div>
@@ -707,13 +719,23 @@
                             </div>
                           </div>
                         </div>
-                        <button
-                          onClick={exportarParaPDF}
-                          className="w-full md:w-auto bg-slate-800 hover:bg-slate-900 text-white px-6 py-2.5 rounded-lg font-bold text-sm shadow-lg transition-all flex items-center justify-center gap-2 border border-slate-700"
-                        >
-                          🖨️ Imprimir PDF
-                        </button>
+                        
+                        <div className="flex flex-col sm:flex-row gap-2 w-full md:w-auto mt-3 md:mt-0">
+                          <button
+                            onClick={salvarChamadaNoBanco}
+                            className="w-full sm:w-auto bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                          >
+                            💾 SALVAR CHAMADA
+                          </button>
+                          <button
+                            onClick={exportarParaPDF}
+                            className="w-full sm:w-auto bg-slate-800 hover:bg-slate-900 text-white px-5 py-2.5 rounded-lg font-bold text-sm shadow-md transition-all flex items-center justify-center gap-2"
+                          >
+                            🖨️ IMPRIMIR PDF
+                          </button>
+                        </div>
                       </div>
+
                     </div>
                     
                     <div className="space-y-3 mt-2">
@@ -1060,13 +1082,11 @@
               </div>
             )}
 
-            {/* Elemento de CSS Adicional (Scrollbar) */}
             <style dangerouslySetInnerHTML={{__html: `
               .animate-fade-in { animation: fadeIn 0.3s ease-in-out; }
               @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
             `}} />
 
-            {/* Rodapé fixo ajustado */}
             <footer className="fixed bottom-0 left-0 right-0 bg-slate-900 text-slate-400 text-center py-3 text-[10px] shadow-lg z-50 border-t border-slate-800 uppercase tracking-widest font-bold flex justify-center items-center gap-2">
               Desenvolvido por 3S SGS OSCAR <span className="w-1 h-1 bg-slate-600 rounded-full"></span> v3.0
             </footer>
