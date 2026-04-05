@@ -8,9 +8,9 @@
     <meta name="apple-mobile-web-app-title" content="Controle Efetivo">
     <meta name="theme-color" content="#0f172a">
     <title>Controle de Efetivo - 1º GDAAE</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
@@ -396,7 +396,6 @@
           return matchBusca && matchPosto && matchSecao;
         });
 
-        // Removidos manipuladores que chamavam setPaginaAtual(1)
         const handleBusca = (v) => { setBusca(v); };
         const handleFiltroPosto = (v) => { setFiltroPosto(v); };
         const handleFiltroSecao = (v) => { setFiltroSecao(v); };
